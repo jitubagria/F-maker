@@ -32,7 +32,16 @@
         </header>
 
         <section class="screen" id="dashboard" aria-labelledby="dashboard-title">
-          <div class="placeholder-screen"><p class="eyebrow">Workspace overview</p><h1 id="dashboard-title">Dashboard</h1><p>Your brand, asset, and export overview will live here.</p></div>
+          <div class="dashboard-page">
+            <div class="page-intro dashboard-intro"><div><p class="eyebrow">Workspace overview</p><h1 id="dashboard-title">Dashboard</h1><p>See the current state of your local creative system at a glance.</p></div><a class="dashboard-create" href="#create">＋ New featured image</a></div>
+            <div class="dashboard-card-grid" id="dashboardCards" aria-live="polite">
+              <article class="dashboard-card"><p>Brands</p><strong id="statBrands">—</strong></article>
+              <article class="dashboard-card"><p>Templates</p><strong id="statTemplates">—</strong></article>
+              <article class="dashboard-card"><p>Cutouts</p><strong id="statCutouts">—</strong></article>
+              <article class="dashboard-card"><p>Exports</p><strong id="statExports">—</strong></article>
+            </div>
+            <section class="category-breakdown" aria-labelledby="category-breakdown-title"><div><p class="eyebrow">Asset coverage</p><h2 id="category-breakdown-title">Cutouts by category</h2></div><div id="categoryBreakdown" class="category-list" aria-live="polite"></div></section>
+          </div>
         </section>
 
         <section class="screen" id="create" aria-labelledby="create-title">

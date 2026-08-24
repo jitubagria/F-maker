@@ -27,6 +27,15 @@ const getPayload = () => ({ domain: domain.value, template: template.value, cate
 const updateTitleCount = () => titleCount.textContent = `${title.value.length} / 140`;
 const updateLabel = () => label.textContent = `${domain.options[domain.selectedIndex].text} / ${template.value.replaceAll('_', ' ')}`;
 
+function renderDashboard(stats) {
+  document.getElementById('statBrands').textContent = stats.brands;
+  document.getElementById('statTemplates').textContent = stats.templates;
+  document.getElementById('statCutouts').textContent = stats.total_cutouts;
+  document.getElementById('statExports').textContent = stats.total_exports;
+  document.getElementById('categoryBreakdown').innerHTML = Object.entries(stats.cutouts_by_category)
+    .map(([name, count]) => `<div class="category-row"><span>${name.replaceAll('_', ' ')}</span><strong>${count}</strong></div>`).join('');
+}
+
 async function renderPreview() {
   clearTimeout(previewTimer);
   updateTitleCount(); updateLabel(); error.hidden = true;
@@ -44,15 +53,16 @@ function schedulePreview() { clearTimeout(previewTimer); previewTimer = setTimeo
 function refreshTemplates() { addOptions(template, config.domains[domain.value].templates, config.domains[domain.value].templates[0]); updateLabel(); schedulePreview(); }
 
 async function initialise() {
-  const [configResponse, photosResponse] = await Promise.all([fetch('/api/config'), fetch('/api/photos')]);
-  config = await configResponse.json(); const photos = (await photosResponse.json()).photos;
+  const [configResponse, photosResponse, statsResponse] = await Promise.all([fetch('/api/config'), fetch('/api/photos'), fetch('/api/stats')]);
+  config = await configResponse.json(); const photos = (await photosResponse.json()).photos; const stats = await statsResponse.json();
   addOptions(domain, Object.keys(config.domains), 'matrixedu');
   domain.innerHTML = Object.keys(config.domains).map(key => `<option value="${key}">${key === 'matrixedu' ? 'MatrixEdu' : key === 'edunews' ? 'EduNews' : key}</option>`).join('');
   refreshTemplates(); addOptions(category, config.categories, 'news');
   photo.innerHTML = `<option value="">Auto-select for category</option>${photos.map(item => `<option value="${item}">${item.split('/').pop().replace('.png', '')}</option>`).join('')}`;
-  document.getElementById('brandCount').textContent = Object.keys(config.domains).length;
-  document.getElementById('templateCount').textContent = Object.values(config.domains).reduce((sum, item) => sum + item.templates.length, 0);
-  document.getElementById('assetCount').textContent = photos.length;
+  document.getElementById('brandCount').textContent = stats.brands;
+  document.getElementById('templateCount').textContent = stats.templates;
+  document.getElementById('assetCount').textContent = stats.total_cutouts;
+  renderDashboard(stats);
   renderPreview();
 }
 domain.addEventListener('change', refreshTemplates);

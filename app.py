@@ -25,11 +25,29 @@ def public_config():
             "categories": sorted(CFG["category_to_photo_folder"].keys())}
 
 
-def available_photos():
+def available_photos(root=APP_ROOT):
     photos = []
-    for path in sorted((APP_ROOT / "cutouts").glob("**/*.png")):
-        photos.append(path.relative_to(APP_ROOT).as_posix())
+    root = Path(root)
+    for path in sorted((root / "cutouts").glob("**/*.png")):
+        photos.append(path.relative_to(root).as_posix())
     return photos
+
+
+def stats_payload(config=CFG, root=APP_ROOT, output_dir=OUTPUT_DIR):
+    """Return filesystem-derived dashboard counts without changing any assets."""
+    root = Path(root)
+    output_dir = Path(output_dir)
+    by_category = {}
+    for category, folder in config["category_to_photo_folder"].items():
+        category_dir = root / folder
+        by_category[category] = len(list(category_dir.glob("*.png"))) if category_dir.is_dir() else 0
+    return {
+        "brands": len(config["domains"]),
+        "templates": sum(len(domain["templates"]) for domain in config["domains"].values()),
+        "cutouts_by_category": by_category,
+        "total_cutouts": sum(by_category.values()),
+        "total_exports": len(list(output_dir.glob("*.webp"))) if output_dir.is_dir() else 0,
+    }
 
 
 def payload():
@@ -72,6 +90,10 @@ def create_app():
     @app.get("/api/photos")
     def photos():
         return jsonify({"photos": available_photos()})
+
+    @app.get("/api/stats")
+    def stats():
+        return jsonify(stats_payload())
 
     @app.post("/api/preview")
     def preview():
