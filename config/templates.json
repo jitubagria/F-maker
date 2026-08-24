@@ -1,0 +1,56 @@
+{
+  "_comment": "Everything here is DATA. Add a domain or template = add a row, no code change. Coordinates are in pixels on a 1024x468 canvas. Zones are [x, y, width, height]. anchor tells where the cutout sits inside the photo zone.",
+
+  "canvas": { "width": 1024, "height": 468, "output_format": "webp", "output_quality": 90 },
+
+  "default_cutout": "cutouts/students/student1.png",
+
+  "domains": {
+    "matrixedu": {
+      "brand_color": "#1A5C38",
+      "brand_color_dark": "#114027",
+      "highlight_color": "#F5C518",
+      "text_color": "#FFFFFF",
+      "logo": "templates/logo_matrix.png",
+      "font": "fonts/headline.ttf",
+      "templates": {
+        "news": {
+          "background": "templates/matrix_news_bg.png",
+          "text_zone":  [48, 90, 560, 280],
+          "subtitle_zone": [48, 382, 560, 32],
+          "photo_zone": [620, 40, 400, 428],
+          "photo_anchor": "bottom",
+          "logo_zone":  [48, 30, 190, 48]
+        }
+      }
+    },
+
+    "edunews": {
+      "brand_color": "#123A8A",
+      "brand_color_dark": "#0C2A66",
+      "highlight_color": "#F5C518",
+      "text_color": "#FFFFFF",
+      "logo": "templates/logo_edunews.png",
+      "font": "fonts/headline.ttf",
+      "templates": {
+        "news": {
+          "background": "templates/edunews_news_bg.png",
+          "text_zone":  [48, 96, 560, 280],
+          "subtitle_zone": [48, 388, 560, 32],
+          "photo_zone": [630, 30, 394, 438],
+          "photo_anchor": "bottom",
+          "logo_zone":  [48, 28, 200, 48]
+        }
+      }
+    }
+  },
+
+  "category_to_photo_folder": {
+    "news": "cutouts/students",
+    "result": "cutouts/students",
+    "counselling": "cutouts/students",
+    "admission": "cutouts/building",
+    "campus": "cutouts/building",
+    "sports": "cutouts/sports"
+  }
+}

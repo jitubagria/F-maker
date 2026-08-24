@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+
+# Generated image outputs and temporary visual/test audit artifacts.
+output/exports/
+output/*.png
+output/*.webp
+_test/
