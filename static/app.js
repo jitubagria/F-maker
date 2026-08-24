@@ -36,6 +36,42 @@ function renderDashboard(stats) {
     .map(([name, count]) => `<div class="category-row"><span>${name.replaceAll('_', ' ')}</span><strong>${count}</strong></div>`).join('');
 }
 
+function bytes(value) {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function renderExports(items) {
+  const grid = document.getElementById('exportsGrid');
+  const empty = document.getElementById('exportsEmpty');
+  empty.hidden = items.length > 0;
+  grid.innerHTML = items.map((item) => `<article class="export-card"><div class="export-thumb">${item.thumb_url ? `<img src="${item.thumb_url}" alt="Preview of ${item.name}" />` : '<span>WEBP</span>'}</div><div class="export-card-body"><h2>${item.name}</h2><p>${new Date(item.modified).toLocaleString()} · ${bytes(item.size)}</p><div><a href="${item.url}">Download</a><button type="button" data-export-delete="${item.name}">Delete</button></div></div></article>`).join('');
+  grid.querySelectorAll('[data-export-delete]').forEach((button) => button.addEventListener('click', () => deleteExport(button.dataset.exportDelete)));
+}
+
+async function loadExports() {
+  const message = document.getElementById('exportsMessage');
+  try {
+    const response = await fetch('/api/exports');
+    if (!response.ok) throw new Error('Exports could not be loaded.');
+    renderExports(await response.json());
+    message.textContent = '';
+  } catch (problem) { message.textContent = problem.message; }
+}
+
+async function deleteExport(name) {
+  if (!window.confirm(`Delete ${name} and its PNG preview?`)) return;
+  const message = document.getElementById('exportsMessage');
+  try {
+    const response = await fetch(`/api/exports/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Export could not be deleted.');
+    message.textContent = `Deleted ${name}.`;
+    await loadExports();
+  } catch (problem) { message.textContent = problem.message; }
+}
+
 async function renderPreview() {
   clearTimeout(previewTimer);
   updateTitleCount(); updateLabel(); error.hidden = true;
@@ -63,13 +99,15 @@ async function initialise() {
   document.getElementById('templateCount').textContent = stats.templates;
   document.getElementById('assetCount').textContent = stats.total_cutouts;
   renderDashboard(stats);
+  loadExports();
   renderPreview();
 }
 domain.addEventListener('change', refreshTemplates);
 [template, category, photo, title, highlight, subtitle].forEach(element => element.addEventListener('input', schedulePreview));
 form.addEventListener('submit', async event => {
   event.preventDefault(); error.hidden = true; previewState.textContent = 'Exporting…';
-  try { const response = await fetch('/api/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(getPayload()) }); if (!response.ok) throw new Error((await response.json()).error || 'Export failed.'); const result = await response.json(); downloadLink.href = result.webp; downloadLink.textContent = 'Download latest export'; downloadLink.hidden = false; previewState.textContent = 'Export complete'; window.location.assign(result.webp); } catch (problem) { error.textContent = problem.message; error.hidden = false; previewState.textContent = 'Needs attention'; }
+  try { const response = await fetch('/api/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(getPayload()) }); if (!response.ok) throw new Error((await response.json()).error || 'Export failed.'); const result = await response.json(); downloadLink.href = result.webp; downloadLink.textContent = 'Download latest export'; downloadLink.hidden = false; previewState.textContent = 'Export complete'; await loadExports(); window.location.assign(result.webp); } catch (problem) { error.textContent = problem.message; error.hidden = false; previewState.textContent = 'Needs attention'; }
 });
 document.getElementById('newButton').addEventListener('click', () => { window.location.hash = 'create'; title.value = ''; highlight.value = ''; subtitle.value = ''; downloadLink.hidden = true; updateTitleCount(); schedulePreview(); title.focus(); });
+window.addEventListener('hashchange', () => { if (window.location.hash === '#exports') loadExports(); });
 initialise().catch(problem => { error.textContent = `Could not load the editor: ${problem.message}`; error.hidden = false; });

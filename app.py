@@ -2,6 +2,7 @@
 from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
+from datetime import datetime, timezone
 import re
 
 from flask import Flask, jsonify, request, send_file, send_from_directory
@@ -48,6 +49,49 @@ def stats_payload(config=CFG, root=APP_ROOT, output_dir=OUTPUT_DIR):
         "total_cutouts": sum(by_category.values()),
         "total_exports": len(list(output_dir.glob("*.webp"))) if output_dir.is_dir() else 0,
     }
+
+
+def _safe_export_name(filename):
+    candidate = Path(filename)
+    if candidate.name != filename or candidate.suffix.lower() not in {".webp", ".png"}:
+        raise ValueError("Export filename must be a single .webp or .png file")
+    return candidate.name
+
+
+def list_exports(output_dir=OUTPUT_DIR):
+    output_dir = Path(output_dir)
+    if not output_dir.is_dir():
+        return []
+    exports = []
+    for webp in sorted(output_dir.glob("*.webp"), key=lambda path: path.stat().st_mtime, reverse=True):
+        modified = datetime.fromtimestamp(webp.stat().st_mtime, tz=timezone.utc).isoformat()
+        png = webp.with_suffix(".png")
+        exports.append({
+            "name": webp.name,
+            "size": webp.stat().st_size,
+            "modified": modified,
+            "url": f"/exports/{webp.name}?download=1",
+            "thumb_url": f"/exports/{png.name}" if png.is_file() else None,
+        })
+    return exports
+
+
+def delete_export_pair(filename, output_dir=OUTPUT_DIR):
+    name = _safe_export_name(filename)
+    output_dir = Path(output_dir).resolve()
+    requested = (output_dir / name).resolve()
+    if output_dir not in requested.parents:
+        raise ValueError("Export filename is outside the exports folder")
+    stem = requested.with_suffix("")
+    targets = [stem.with_suffix(".webp"), stem.with_suffix(".png")]
+    removed = []
+    for target in targets:
+        if target.is_file():
+            target.unlink()
+            removed.append(target.name)
+    if not removed:
+        raise FileNotFoundError("Export was not found")
+    return removed
 
 
 def payload():
@@ -117,15 +161,33 @@ def create_app():
         except (ValueError, KeyError) as error:
             return jsonify({"error": str(error)}), 400
         return jsonify({
-            "webp": f"/exports/{Path(webp).name}",
-            "png": f"/exports/{Path(png).name}",
+            "webp": f"/exports/{Path(webp).name}?download=1",
+            "png": f"/exports/{Path(png).name}?download=1",
             "subject_warning": subject.has_warning,
             "subject_warning_message": subject.warning_message,
         })
 
+    @app.get("/api/exports")
+    def export_list():
+        return jsonify(list_exports())
+
+    @app.delete("/api/exports/<path:filename>")
+    def export_delete(filename):
+        try:
+            removed = delete_export_pair(filename)
+        except ValueError as error:
+            return jsonify({"error": str(error)}), 400
+        except FileNotFoundError as error:
+            return jsonify({"error": str(error)}), 404
+        return jsonify({"removed": removed})
+
     @app.get("/exports/<path:filename>")
     def exports(filename):
-        return send_from_directory(OUTPUT_DIR, filename, as_attachment=True)
+        try:
+            name = _safe_export_name(filename)
+        except ValueError:
+            return jsonify({"error": "Export file was not found"}), 404
+        return send_from_directory(OUTPUT_DIR, name, as_attachment=request.args.get("download") == "1")
 
     return app
 
