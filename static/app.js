@@ -1,3 +1,7 @@
+import { startRouter } from './router.mjs';
+
+startRouter();
+
 const form = document.getElementById('editorForm');
 const domain = document.getElementById('domain');
 const template = document.getElementById('template');
@@ -57,5 +61,5 @@ form.addEventListener('submit', async event => {
   event.preventDefault(); error.hidden = true; previewState.textContent = 'Exporting…';
   try { const response = await fetch('/api/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(getPayload()) }); if (!response.ok) throw new Error((await response.json()).error || 'Export failed.'); const result = await response.json(); downloadLink.href = result.webp; downloadLink.textContent = 'Download latest export'; downloadLink.hidden = false; previewState.textContent = 'Export complete'; window.location.assign(result.webp); } catch (problem) { error.textContent = problem.message; error.hidden = false; previewState.textContent = 'Needs attention'; }
 });
-document.getElementById('newButton').addEventListener('click', () => { title.value = ''; highlight.value = ''; subtitle.value = ''; downloadLink.hidden = true; updateTitleCount(); schedulePreview(); title.focus(); });
+document.getElementById('newButton').addEventListener('click', () => { window.location.hash = 'create'; title.value = ''; highlight.value = ''; subtitle.value = ''; downloadLink.hidden = true; updateTitleCount(); schedulePreview(); title.focus(); });
 initialise().catch(problem => { error.textContent = `Could not load the editor: ${problem.message}`; error.hidden = false; });

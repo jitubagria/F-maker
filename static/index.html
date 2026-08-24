@@ -9,55 +9,84 @@
   <body>
     <div class="app-shell">
       <aside class="sidebar" aria-label="Dashboard navigation">
-        <a class="wordmark" href="/">Fmaker<span>.</span></a>
+        <a class="wordmark" href="#dashboard" data-route="dashboard">Fmaker<span>.</span></a>
         <button class="create-button" type="button" id="newButton"><span>＋</span> New featured image</button>
         <p class="nav-label">Workspace</p>
         <nav class="dashboard-nav" aria-label="Workspace">
-          <a href="#dashboard"><span>▦</span> Dashboard</a>
-          <a class="active" href="#create"><span>✦</span> Create image</a>
-          <a href="#exports"><span>↗</span> Exports</a>
+          <a href="#dashboard" data-route="dashboard"><span>▦</span> Dashboard</a>
+          <a href="#create" data-route="create"><span>✦</span> Create image</a>
+          <a href="#exports" data-route="exports"><span>↗</span> Exports</a>
         </nav>
         <p class="nav-label">Creative library</p>
         <nav class="dashboard-nav" aria-label="Creative library">
-          <a href="#templates"><span>▤</span> Templates</a>
-          <a href="#assets"><span>◒</span> Asset library</a>
-          <a href="#brands"><span>◉</span> Brand themes</a>
+          <a href="#templates" data-route="templates"><span>▤</span> Templates</a>
+          <a href="#assets" data-route="assets"><span>◒</span> Asset library</a>
+          <a href="#brands" data-route="brands"><span>◉</span> Brand themes</a>
         </nav>
         <div class="sidebar-footer"><span class="status-dot"></span> Local workspace</div>
       </aside>
-      <main class="main-content" id="dashboard">
-        <header class="topbar"><div><p class="eyebrow">Creative operations</p><p class="workspace-name">Fmaker workspace</p></div><div class="header-actions"><span class="saved" id="previewState">Preview ready</span><button class="outline" type="button">Share feedback</button><span class="avatar">A</span></div></header>
-        <section class="page-intro" id="create"><div><p class="eyebrow">Featured image editor</p><h1>Create a post visual</h1><p>Build on-brand thumbnails for every domain from one controlled workspace.</p></div><div class="system-summary"><span><b id="brandCount">—</b> brands</span><span><b id="templateCount">—</b> templates</span><span><b id="assetCount">—</b> cutouts</span></div></section>
-        <section class="workspace">
-      <section class="editor-panel" aria-label="Image settings">
-        <div class="panel-heading"><h2>Image settings</h2><p>Content, styling, and source assets.</p></div>
-        <form id="editorForm">
-          <fieldset><legend>Brand & layout</legend>
-            <label>Domain<select id="domain" name="domain"></select></label>
-            <label>Template<select id="template" name="template"></select></label>
-            <label>Article category<select id="category" name="category"></select></label>
-          </fieldset>
-          <fieldset><legend>Message</legend>
-            <label>Headline<textarea id="title" name="title" rows="4" maxlength="140">NEET 2026 EXAM TIME INCREASED</textarea><small id="titleCount">31 / 140</small></label>
-            <label>Highlight phrase<input id="highlight" name="highlight" value="NEET 2026" maxlength="60" /></label>
-            <label>Supporting line <input id="subtitle" name="subtitle" value="NTA ANNOUNCES KEY CHANGE FOR STUDENTS" maxlength="85" /></label>
-          </fieldset>
-          <fieldset id="assets"><legend>Subject asset</legend>
-            <label>Cutout<select id="photo" name="photo"></select></label>
-            <p class="asset-note">More people and campus-photo assets can be added to the shared library.</p>
-          </fieldset>
-          <p id="formError" class="form-error" role="alert" hidden></p>
-          <button class="export-button" type="submit">Export WebP + PNG <span>→</span></button>
-        </form>
-      </section>
-      <section class="preview-area" aria-label="Live preview">
-        <div class="preview-toolbar"><div><p class="eyebrow">Live preview</p><h2 id="previewLabel">MatrixEdu / News</h2></div><span id="resolution">1024 × 468</span></div>
-        <div class="canvas-stage"><div class="image-frame"><img id="previewImage" alt="Generated featured image preview" /></div></div>
-        <div class="preview-footer"><p>Changes render automatically.</p><a id="downloadLink" hidden>Download latest export</a></div>
-      </section>
+      <main class="main-content">
+        <header class="topbar">
+          <div><p class="eyebrow">Creative operations</p><p class="workspace-name">Fmaker workspace</p></div>
+          <div class="header-actions"><span class="saved" id="previewState">Preview ready</span><button class="outline" type="button">Share feedback</button><span class="avatar">A</span></div>
+        </header>
+
+        <section class="screen" id="dashboard" aria-labelledby="dashboard-title">
+          <div class="placeholder-screen"><p class="eyebrow">Workspace overview</p><h1 id="dashboard-title">Dashboard</h1><p>Your brand, asset, and export overview will live here.</p></div>
+        </section>
+
+        <section class="screen" id="create" aria-labelledby="create-title">
+          <div class="page-intro">
+            <div><p class="eyebrow">Featured image editor</p><h1 id="create-title">Create a post visual</h1><p>Build on-brand thumbnails for every domain from one controlled workspace.</p></div>
+            <div class="system-summary"><span><b id="brandCount">—</b> brands</span><span><b id="templateCount">—</b> templates</span><span><b id="assetCount">—</b> cutouts</span></div>
+          </div>
+          <div class="workspace">
+            <section class="editor-panel" aria-label="Image settings">
+              <div class="panel-heading"><h2>Image settings</h2><p>Content, styling, and source assets.</p></div>
+              <form id="editorForm">
+                <fieldset><legend>Brand & layout</legend>
+                  <label>Domain<select id="domain" name="domain"></select></label>
+                  <label>Template<select id="template" name="template"></select></label>
+                  <label>Article category<select id="category" name="category"></select></label>
+                </fieldset>
+                <fieldset><legend>Message</legend>
+                  <label>Headline<textarea id="title" name="title" rows="4" maxlength="140">NEET 2026 EXAM TIME INCREASED</textarea><small id="titleCount">31 / 140</small></label>
+                  <label>Highlight phrase<input id="highlight" name="highlight" value="NEET 2026" maxlength="60" /></label>
+                  <label>Supporting line <input id="subtitle" name="subtitle" value="NTA ANNOUNCES KEY CHANGE FOR STUDENTS" maxlength="85" /></label>
+                </fieldset>
+                <fieldset id="subject-asset"><legend>Subject asset</legend>
+                  <label>Cutout<select id="photo" name="photo"></select></label>
+                  <p class="asset-note">More people and campus-photo assets can be added to the shared library.</p>
+                </fieldset>
+                <p id="formError" class="form-error" role="alert" hidden></p>
+                <button class="export-button" type="submit">Export WebP + PNG <span>→</span></button>
+              </form>
+            </section>
+            <section class="preview-area" aria-label="Live preview">
+              <div class="preview-toolbar"><div><p class="eyebrow">Live preview</p><h2 id="previewLabel">MatrixEdu / News</h2></div><span id="resolution">1024 × 468</span></div>
+              <div class="canvas-stage"><div class="image-frame"><img id="previewImage" alt="Generated featured image preview" /></div></div>
+              <div class="preview-footer"><p>Changes render automatically.</p><a id="downloadLink" hidden>Download latest export</a></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="screen" id="exports" aria-labelledby="exports-title">
+          <div class="placeholder-screen"><p class="eyebrow">Generated files</p><h1 id="exports-title">Exports</h1><p>Your completed WebP and PNG featured images will be available here.</p></div>
+        </section>
+
+        <section class="screen" id="templates" aria-labelledby="templates-title">
+          <div class="placeholder-screen"><p class="eyebrow">Layout system</p><h1 id="templates-title">Templates</h1><p>Manage the background layouts and placement zones for every domain.</p></div>
+        </section>
+
+        <section class="screen" id="assets" aria-labelledby="assets-title">
+          <div class="placeholder-screen"><p class="eyebrow">Local asset library</p><h1 id="assets-title">Asset library</h1><p>Manage category-based source photos and transparent cutouts here.</p></div>
+        </section>
+
+        <section class="screen" id="brands" aria-labelledby="brands-title">
+          <div class="placeholder-screen"><p class="eyebrow">Brand system</p><h1 id="brands-title">Brand themes</h1><p>Manage each domain’s colors, fonts, logo, and template family here.</p></div>
         </section>
       </main>
     </div>
-    <script src="/static/app.js"></script>
+    <script type="module" src="/static/app.js"></script>
   </body>
 </html>
