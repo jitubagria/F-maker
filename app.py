@@ -20,6 +20,7 @@ MAX_ASSET_UPLOAD_BYTES = 10 * 1024 * 1024
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 CATEGORY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 TEMPLATE_ZONE_FIELDS = ("text_zone", "subtitle_zone", "photo_zone", "logo_zone")
+BRAND_FIELDS = ("brand_color", "brand_color_dark", "highlight_color", "text_color", "logo", "font")
 
 
 def public_config():
@@ -247,6 +248,73 @@ def update_template_zones(domain_name, template_name, zones, config=CFG, root=AP
     return updated
 
 
+def brand_payload(config=CFG):
+    brands = []
+    for name, domain in config["domains"].items():
+        brands.append({"name": name, **{field: domain[field] for field in BRAND_FIELDS}, "template_count": len(domain["templates"])})
+    return {"brands": brands, "default_cutout": config.get("default_cutout")}
+
+
+def _brand_values(data):
+    if not isinstance(data, dict):
+        raise ValueError("Brand details must be an object")
+    values = {}
+    for field in BRAND_FIELDS:
+        value = data.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"Brand field '{field}' is required")
+        values[field] = value.strip()
+    return values
+
+
+def _set_default_cutout(config, value):
+    if value is None:
+        return
+    if not isinstance(value, str):
+        raise ValueError("Default cutout must be a path string")
+    if value.strip():
+        config["default_cutout"] = value.strip()
+    else:
+        config.pop("default_cutout", None)
+
+
+def create_brand(name, data, config=CFG, root=APP_ROOT):
+    name = _safe_category(name)
+    updated = copy.deepcopy(config)
+    if name in updated["domains"]:
+        raise ValueError(f"Domain '{name}' already exists")
+    based_on = data.get("based_on") if isinstance(data, dict) else None
+    if based_on not in updated["domains"]:
+        raise ValueError("Choose an existing domain whose template layout will be reused")
+    new_domain = copy.deepcopy(updated["domains"][based_on])
+    new_domain.update(_brand_values(data))
+    updated["domains"][name] = new_domain
+    _set_default_cutout(updated, data.get("default_cutout"))
+    validate_config(updated, root)
+    return updated
+
+
+def update_brand(name, data, config=CFG, root=APP_ROOT):
+    updated = copy.deepcopy(config)
+    if name not in updated["domains"]:
+        raise ValueError(f"Unknown domain: {name}")
+    updated["domains"][name].update(_brand_values(data))
+    _set_default_cutout(updated, data.get("default_cutout"))
+    validate_config(updated, root)
+    return updated
+
+
+def delete_brand(name, config=CFG, root=APP_ROOT):
+    updated = copy.deepcopy(config)
+    if name not in updated["domains"]:
+        raise ValueError(f"Unknown domain: {name}")
+    if len(updated["domains"]) == 1:
+        raise ValueError("Keep at least one domain in the workspace")
+    del updated["domains"][name]
+    validate_config(updated, root)
+    return updated
+
+
 def payload():
     body = request.get_json(silent=True) or {}
     return {
@@ -291,6 +359,38 @@ def create_app():
     @app.get("/api/stats")
     def stats():
         return jsonify(stats_payload())
+
+    @app.get("/api/brands")
+    def brands_list():
+        return jsonify(brand_payload())
+
+    @app.post("/api/brands")
+    def brand_create():
+        try:
+            data = request.get_json(silent=True) or {}
+            updated = create_brand(data.get("name"), data, CFG, APP_ROOT)
+            save_config(updated, APP_ROOT)
+        except (ValueError, ConfigError) as error:
+            return jsonify({"error": str(error)}), 400
+        return jsonify(brand_payload()), 201
+
+    @app.put("/api/brands/<domain_name>")
+    def brand_update(domain_name):
+        try:
+            updated = update_brand(domain_name, request.get_json(silent=True) or {}, CFG, APP_ROOT)
+            save_config(updated, APP_ROOT)
+        except (ValueError, ConfigError) as error:
+            return jsonify({"error": str(error)}), 400
+        return jsonify(brand_payload())
+
+    @app.delete("/api/brands/<domain_name>")
+    def brand_delete(domain_name):
+        try:
+            updated = delete_brand(domain_name, CFG, APP_ROOT)
+            save_config(updated, APP_ROOT)
+        except (ValueError, ConfigError) as error:
+            return jsonify({"error": str(error)}), 400
+        return jsonify(brand_payload())
 
     @app.get("/api/templates")
     def templates_list():

@@ -24,6 +24,8 @@ const assetBefore = document.getElementById('assetBefore');
 const assetAfter = document.getElementById('assetAfter');
 const templateLibrary = document.getElementById('templateLibrary');
 const templatesMessage = document.getElementById('templatesMessage');
+const brandLibrary = document.getElementById('brandLibrary');
+const brandsMessage = document.getElementById('brandsMessage');
 let config;
 let previewTimer;
 let previewUrl;
@@ -190,6 +192,79 @@ async function saveTemplateZones(event, card) {
   } catch (problem) { templatesMessage.textContent = problem.message; }
 }
 
+function cutoutOptions(photos, selected) {
+  return `<option value="">No default cutout</option>${photos.map((item) => `<option value="${item}" ${item === selected ? 'selected' : ''}>${escapeHtml(item)}</option>`).join('')}`;
+}
+
+function brandFields(brand, photos, defaultCutout) {
+  return `<label>Brand color<input name="brand_color" type="color" value="${brand.brand_color}" required /></label><label>Dark brand color<input name="brand_color_dark" type="color" value="${brand.brand_color_dark}" required /></label><label>Highlight color<input name="highlight_color" type="color" value="${brand.highlight_color}" required /></label><label>Text color<input name="text_color" type="color" value="${brand.text_color}" required /></label><label>Logo path<input name="logo" value="${escapeHtml(brand.logo)}" required /></label><label>Font path<input name="font" value="${escapeHtml(brand.font)}" required /></label><label>Default cutout<select name="default_cutout">${cutoutOptions(photos, defaultCutout)}</select></label>`;
+}
+
+function renderBrands(payload, photos) {
+  const base = document.getElementById('brandBase');
+  addOptions(base, payload.brands.map((brand) => brand.name), base.value || payload.brands[0]?.name);
+  const selectedBase = payload.brands.find((brand) => brand.name === base.value) || payload.brands[0];
+  if (selectedBase) fillBrandCreateForm(selectedBase, photos, payload.default_cutout);
+  brandLibrary.innerHTML = payload.brands.map((brand) => `<article class="brand-card"><div class="brand-swatch" style="--brand: ${brand.brand_color}; --accent: ${brand.highlight_color}"></div><div class="brand-card-body"><div><p class="eyebrow">${escapeHtml(brand.name)}</p><h2>${escapeHtml(brand.name)}</h2><p>${brand.template_count} template${brand.template_count === 1 ? '' : 's'}</p></div><form class="brand-form" data-domain="${escapeHtml(brand.name)}">${brandFields(brand, photos, payload.default_cutout)}<div class="brand-actions"><button class="export-button" type="submit">Save theme <span>→</span></button><button type="button" class="danger-link" data-brand-delete>Delete domain</button></div></form></div></article>`).join('');
+  brandLibrary.querySelectorAll('.brand-form').forEach((formElement) => formElement.addEventListener('submit', (event) => saveBrand(event, formElement)));
+  brandLibrary.querySelectorAll('[data-brand-delete]').forEach((button) => button.addEventListener('click', () => deleteBrand(button.closest('.brand-form').dataset.domain)));
+}
+
+function fillBrandCreateForm(brand, photos, defaultCutout) {
+  const formElement = document.getElementById('brandCreateForm');
+  ['brand_color', 'brand_color_dark', 'highlight_color', 'text_color', 'logo', 'font'].forEach((field) => { formElement.elements[field].value = brand[field]; });
+  formElement.elements.default_cutout.innerHTML = cutoutOptions(photos, defaultCutout);
+}
+
+function formObject(formElement) { return Object.fromEntries(new FormData(formElement).entries()); }
+
+async function refreshEditorConfig() {
+  const selectedDomain = domain.value;
+  const response = await fetch('/api/config');
+  if (!response.ok) throw new Error('Create-image brand picker could not be refreshed.');
+  config = await response.json();
+  const names = Object.keys(config.domains);
+  domain.innerHTML = names.map((key) => `<option value="${key}">${key === 'matrixedu' ? 'MatrixEdu' : key === 'edunews' ? 'EduNews' : escapeHtml(key)}</option>`).join('');
+  domain.value = names.includes(selectedDomain) ? selectedDomain : names[0];
+  refreshTemplates();
+}
+
+async function loadBrands() {
+  try {
+    const [brandsResponse, photosResponse] = await Promise.all([fetch('/api/brands'), fetch('/api/photos')]);
+    if (!brandsResponse.ok || !photosResponse.ok) throw new Error('Brand themes could not be loaded.');
+    renderBrands(await brandsResponse.json(), (await photosResponse.json()).photos);
+    brandsMessage.textContent = '';
+  } catch (problem) { brandsMessage.textContent = problem.message; }
+}
+
+async function saveBrand(event, formElement) {
+  event.preventDefault();
+  const name = formElement.dataset.domain;
+  try {
+    const response = await fetch(`/api/brands/${encodeURIComponent(name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formObject(formElement)) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Brand theme could not be saved.');
+    const photos = (await (await fetch('/api/photos')).json()).photos;
+    renderBrands(result, photos);
+    await refreshEditorConfig();
+    brandsMessage.textContent = `Saved ${name}.`;
+  } catch (problem) { brandsMessage.textContent = problem.message; }
+}
+
+async function deleteBrand(name) {
+  if (!window.confirm(`Delete domain ${name}? Its config row will be removed.`)) return;
+  try {
+    const response = await fetch(`/api/brands/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Brand could not be deleted.');
+    const photos = (await (await fetch('/api/photos')).json()).photos;
+    renderBrands(result, photos);
+    await refreshEditorConfig();
+    brandsMessage.textContent = `Deleted ${name}.`;
+  } catch (problem) { brandsMessage.textContent = problem.message; }
+}
+
 async function renderPreview() {
   clearTimeout(previewTimer);
   updateTitleCount(); updateLabel(); error.hidden = true;
@@ -220,6 +295,7 @@ async function initialise() {
   loadExports();
   loadAssets();
   loadTemplates();
+  loadBrands();
   renderPreview();
 }
 domain.addEventListener('change', refreshTemplates);
@@ -265,5 +341,23 @@ document.getElementById('assetUploadForm').addEventListener('submit', async (eve
     assetsMessage.textContent = `Created ${result.asset.name}.`;
   } catch (problem) { assetsMessage.textContent = problem.message; }
 });
-window.addEventListener('hashchange', () => { if (window.location.hash === '#exports') loadExports(); if (window.location.hash === '#assets') loadAssets(); if (window.location.hash === '#templates') loadTemplates(); });
+document.getElementById('brandBase').addEventListener('change', loadBrands);
+document.getElementById('brandCreateForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const formElement = event.currentTarget;
+  const createdName = formElement.elements.name.value;
+  try {
+    const response = await fetch('/api/brands', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formObject(formElement)) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Domain could not be created.');
+    const photos = (await (await fetch('/api/photos')).json()).photos;
+    renderBrands(result, photos);
+    formElement.reset();
+    await refreshEditorConfig();
+    domain.value = createdName;
+    refreshTemplates();
+    brandsMessage.textContent = `Created ${createdName}.`;
+  } catch (problem) { brandsMessage.textContent = problem.message; }
+});
+window.addEventListener('hashchange', () => { if (window.location.hash === '#exports') loadExports(); if (window.location.hash === '#assets') loadAssets(); if (window.location.hash === '#templates') loadTemplates(); if (window.location.hash === '#brands') loadBrands(); });
 initialise().catch(problem => { error.textContent = `Could not load the editor: ${problem.message}`; error.hidden = false; });
