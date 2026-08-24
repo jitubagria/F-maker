@@ -7,3 +7,15 @@ output/exports/
 output/*.png
 output/*.webp
 _test/
+
+# Local photo library: keep category folders, never commit original or cutout imagery.
+/raw_photos/*
+!/raw_photos/.gitkeep
+!/raw_photos/*/
+/raw_photos/*/*
+!/raw_photos/*/.gitkeep
+/cutouts/*
+!/cutouts/.gitkeep
+!/cutouts/*/
+/cutouts/*/*
+!/cutouts/*/.gitkeep
