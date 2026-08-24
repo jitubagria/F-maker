@@ -88,7 +88,14 @@
         </section>
 
         <section class="screen" id="assets" aria-labelledby="assets-title">
-          <div class="placeholder-screen"><p class="eyebrow">Local asset library</p><h1 id="assets-title">Asset library</h1><p>Manage category-based source photos and transparent cutouts here.</p></div>
+          <div class="dashboard-page assets-page">
+            <div class="page-intro dashboard-intro"><div><p class="eyebrow">Local asset library</p><h1 id="assets-title">Asset library</h1><p>Originals stay in <code>raw_photos</code>; the editor reads transparent PNGs from <code>cutouts</code>.</p></div><span class="asset-model" id="assetModel">rembg model —</span></div>
+            <p class="assets-message" id="assetsMessage" role="status"></p>
+            <div class="asset-toolbar"><label>Category<select id="assetCategory"></select></label><form id="createCategoryForm" class="inline-form"><label>New category<input id="newCategory" maxlength="64" placeholder="e.g. faculty" /></label><button type="submit" class="outline">Create category</button></form></div>
+            <section class="asset-upload-card" aria-labelledby="asset-upload-title"><div><p class="eyebrow">Add original</p><h2 id="asset-upload-title">Upload and create a cutout</h2><p>JPG, JPEG, or PNG up to 10 MB. The selected model creates a transparent PNG in the same category.</p></div><form id="assetUploadForm" class="asset-upload-form"><label>Source photo<input id="assetUpload" name="photo" type="file" accept="image/jpeg,image/png" required /></label><button type="submit" class="export-button">Create cutout <span>→</span></button></form></section>
+            <section id="assetComparison" class="asset-comparison" hidden aria-label="Latest asset comparison"><div><p class="eyebrow">Before</p><div class="checkerboard"><img id="assetBefore" alt="Original uploaded photo" /></div></div><div><p class="eyebrow">After</p><div class="checkerboard"><img id="assetAfter" alt="Transparent generated cutout" /></div></div></section>
+            <div id="assetLibrary" class="asset-library" aria-live="polite"></div>
+          </div>
         </section>
 
         <section class="screen" id="brands" aria-labelledby="brands-title">

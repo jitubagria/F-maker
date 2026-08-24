@@ -43,6 +43,7 @@ def build_fixture(root: Path) -> dict:
     return {
         "canvas": {"width": 400, "height": 220, "output_format": "webp", "output_quality": 90},
         "default_cutout": "cutouts/defaults/sentinel_default.png",
+        "rembg_model": "fixture-segmentation-model",
         "domains": {
             "northstaracademy": {
                 "brand_color": "#123456", "brand_color_dark": "#102030", "highlight_color": "#FFD000", "text_color": "#FFFFFF",
@@ -142,6 +143,10 @@ class EngineHardeningTests(unittest.TestCase):
         del missing_required["domains"]["northstaracademy"]["font"]
         with self.assertRaisesRegex(ConfigError, r"domains\.northstaracademy\.font is required"):
             validate_config(missing_required, self.root)
+        missing_model = copy.deepcopy(self.config)
+        del missing_model["rembg_model"]
+        with self.assertRaisesRegex(ConfigError, r"root\.rembg_model is required"):
+            validate_config(missing_model, self.root)
         missing_background = copy.deepcopy(self.config)
         missing_background["domains"]["northstaracademy"]["templates"]["bulletin"]["background"] = "templates/not-present.png"
         with self.assertRaisesRegex(ConfigError, r"background file is missing"):

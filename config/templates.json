@@ -5,6 +5,8 @@
 
   "default_cutout": "cutouts/students/student1.png",
 
+  "rembg_model": "u2net_human_seg",
+
   "domains": {
     "matrixedu": {
       "brand_color": "#1A5C38",

@@ -96,6 +96,10 @@ def validate_config(config: dict[str, Any], root: str | Path = ROOT) -> list[str
     if isinstance(width, bool) or isinstance(height, bool) or not isinstance(width, int) or not isinstance(height, int) or width <= 0 or height <= 0:
         raise ConfigError("Config error: canvas.width and canvas.height must be positive integers")
 
+    rembg_model = _require(config, "rembg_model", "root")
+    if not isinstance(rembg_model, str) or not rembg_model.strip():
+        raise ConfigError("Config error: root.rembg_model must be a non-empty model name")
+
     domains = _require(config, "domains", "root")
     if not isinstance(domains, dict) or not domains:
         raise ConfigError("Config error: root.domains must be a non-empty object")

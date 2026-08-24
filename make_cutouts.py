@@ -4,14 +4,16 @@ This is how you turn 100+ raw drive photos into the cutout library.
 
     python make_cutouts.py raw_photos cutouts/students
 
-Model 'u2net_human_seg' is tuned for people. Session is reused across the
+The model is read from ``config/templates.json``. Session is reused across the
 whole batch for speed (best-practice from the research).
 """
 import sys, os, glob
 from rembg import remove, new_session
 from PIL import Image
+from engine import CFG
 
-def run(src, dst, model="u2net_human_seg"):
+def run(src, dst, model=None):
+    model = model or CFG["rembg_model"]
     os.makedirs(dst, exist_ok=True)
     session = new_session(model)          # reuse across batch = faster
     files = []

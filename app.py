@@ -6,11 +6,17 @@ from datetime import datetime, timezone
 import re
 
 from flask import Flask, jsonify, request, send_file, send_from_directory
+from PIL import Image, UnidentifiedImageError
 
 from engine import CFG, ROOT, generate, render
 
 APP_ROOT = Path(ROOT)
 OUTPUT_DIR = APP_ROOT / "output" / "exports"
+RAW_PHOTOS_DIR = APP_ROOT / "raw_photos"
+CUTOUTS_DIR = APP_ROOT / "cutouts"
+MAX_ASSET_UPLOAD_BYTES = 10 * 1024 * 1024
+IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
+CATEGORY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
 
 def public_config():
@@ -94,6 +100,100 @@ def delete_export_pair(filename, output_dir=OUTPUT_DIR):
     return removed
 
 
+def _safe_category(category):
+    value = str(category or "").strip().lower()
+    if not CATEGORY_PATTERN.fullmatch(value):
+        raise ValueError("Category must use lowercase letters, numbers, hyphens, or underscores")
+    return value
+
+
+def _safe_cutout_name(filename):
+    candidate = Path(str(filename or ""))
+    if candidate.name != str(filename) or candidate.suffix.lower() != ".png":
+        raise ValueError("Asset filename must be a single PNG filename")
+    return candidate.name
+
+
+def _category_directory(root, collection, category):
+    base = (Path(root) / collection).resolve()
+    target = (base / _safe_category(category)).resolve()
+    if base not in target.parents:
+        raise ValueError("Asset category is outside the local library")
+    return target
+
+
+def _source_image_name(upload_name):
+    candidate = Path(str(upload_name or ""))
+    if candidate.name != str(upload_name) or candidate.suffix.lower() not in IMAGE_SUFFIXES:
+        raise ValueError("Only JPG, JPEG, and PNG image files are accepted")
+    stem = re.sub(r"[^a-zA-Z0-9_-]+", "-", candidate.stem).strip("-_")[:80]
+    if not stem:
+        raise ValueError("Image filename must contain letters or numbers")
+    return f"{stem}{candidate.suffix.lower()}"
+
+
+def _cutout_name_from_source(source_name):
+    return f"{Path(source_name).stem}.png"
+
+
+def asset_payload(root=APP_ROOT):
+    """List the local, category-only source and transparent asset library."""
+    root = Path(root)
+    raw_root = root / "raw_photos"
+    cutouts_root = root / "cutouts"
+    categories = set()
+    for library in (raw_root, cutouts_root):
+        if library.is_dir():
+            categories.update(path.name for path in library.iterdir() if path.is_dir())
+    result = []
+    for category in sorted(categories):
+        try:
+            raw_dir = _category_directory(root, "raw_photos", category)
+            cutout_dir = _category_directory(root, "cutouts", category)
+        except ValueError:
+            continue
+        raw_stems = {path.stem for path in raw_dir.iterdir() if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES} if raw_dir.is_dir() else set()
+        cutouts = []
+        if cutout_dir.is_dir():
+            for path in sorted(cutout_dir.glob("*.png")):
+                cutouts.append({
+                    "name": path.name,
+                    "has_raw": path.stem in raw_stems,
+                    "url": f"/assets/{category}/{path.name}",
+                })
+        result.append({"name": category, "raw_count": len(raw_stems), "cutouts": cutouts})
+    return {"categories": result, "model": CFG["rembg_model"]}
+
+
+def process_cutout(source, target, model, alpha_matting=False):
+    """Run the one configured rembg model and write a transparent PNG."""
+    from rembg import new_session, remove
+
+    session = new_session(model)
+    with Image.open(source) as image:
+        result = remove(image.convert("RGBA"), session=session, alpha_matting=alpha_matting)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    result.save(target, "PNG")
+
+
+def _validate_uploaded_image(upload):
+    if not upload or not upload.filename:
+        raise ValueError("Choose an image to upload")
+    source_name = _source_image_name(upload.filename)
+    upload.stream.seek(0, 2)
+    size = upload.stream.tell()
+    upload.stream.seek(0)
+    if size > MAX_ASSET_UPLOAD_BYTES:
+        raise ValueError("Image exceeds the 10 MB upload limit")
+    try:
+        with Image.open(upload.stream) as image:
+            image.verify()
+    except (UnidentifiedImageError, OSError, ValueError) as error:
+        raise ValueError("Uploaded file is not a valid image") from error
+    upload.stream.seek(0)
+    return source_name
+
+
 def payload():
     body = request.get_json(silent=True) or {}
     return {
@@ -138,6 +238,82 @@ def create_app():
     @app.get("/api/stats")
     def stats():
         return jsonify(stats_payload())
+
+    @app.get("/api/assets")
+    def asset_list():
+        return jsonify(asset_payload())
+
+    @app.post("/api/assets/create-category")
+    def asset_create_category():
+        try:
+            category = _safe_category((request.get_json(silent=True) or {}).get("category"))
+            _category_directory(APP_ROOT, "raw_photos", category).mkdir(parents=True, exist_ok=True)
+            _category_directory(APP_ROOT, "cutouts", category).mkdir(parents=True, exist_ok=True)
+        except ValueError as error:
+            return jsonify({"error": str(error)}), 400
+        return jsonify({"category": category}), 201
+
+    @app.post("/api/assets/upload")
+    def asset_upload():
+        try:
+            category = _safe_category(request.form.get("category"))
+            upload = request.files.get("photo")
+            source_name = _validate_uploaded_image(upload)
+            raw_dir = _category_directory(APP_ROOT, "raw_photos", category)
+            cutout_dir = _category_directory(APP_ROOT, "cutouts", category)
+            raw_path = raw_dir / source_name
+            cutout_path = cutout_dir / _cutout_name_from_source(source_name)
+            if raw_path.exists() or cutout_path.exists():
+                raise ValueError("An asset with this filename already exists in that category")
+            raw_dir.mkdir(parents=True, exist_ok=True)
+            upload.save(raw_path)
+            process_cutout(raw_path, cutout_path, CFG["rembg_model"])
+        except ValueError as error:
+            return jsonify({"error": str(error)}), 400
+        except Exception as error:
+            return jsonify({"error": f"Cutout could not be created: {error}"}), 500
+        return jsonify({"category": category, "asset": {"name": cutout_path.name, "has_raw": True, "url": f"/assets/{category}/{cutout_path.name}"}}), 201
+
+    @app.post("/api/assets/recut")
+    def asset_recut():
+        try:
+            data = request.get_json(silent=True) or {}
+            category = _safe_category(data.get("category"))
+            cutout_name = _safe_cutout_name(data.get("file"))
+            raw_dir = _category_directory(APP_ROOT, "raw_photos", category)
+            cutout_dir = _category_directory(APP_ROOT, "cutouts", category)
+            sources = [path for path in raw_dir.glob(f"{Path(cutout_name).stem}.*") if path.suffix.lower() in IMAGE_SUFFIXES]
+            if len(sources) != 1:
+                raise ValueError("The original source photo for this cutout was not found")
+            process_cutout(sources[0], cutout_dir / cutout_name, CFG["rembg_model"], bool(data.get("alpha_matting")))
+        except ValueError as error:
+            return jsonify({"error": str(error)}), 400
+        except Exception as error:
+            return jsonify({"error": f"Cutout could not be reprocessed: {error}"}), 500
+        return jsonify({"category": category, "asset": {"name": cutout_name, "has_raw": True, "url": f"/assets/{category}/{cutout_name}"}})
+
+    @app.delete("/api/assets/<category>/<path:filename>")
+    def asset_delete(category, filename):
+        try:
+            cutout_dir = _category_directory(APP_ROOT, "cutouts", category)
+            target = (cutout_dir / _safe_cutout_name(filename)).resolve()
+            if cutout_dir.resolve() not in target.parents or not target.is_file():
+                raise FileNotFoundError("Cutout was not found")
+            target.unlink()
+        except ValueError as error:
+            return jsonify({"error": str(error)}), 400
+        except FileNotFoundError as error:
+            return jsonify({"error": str(error)}), 404
+        return jsonify({"removed": target.name})
+
+    @app.get("/assets/<category>/<path:filename>")
+    def asset_file(category, filename):
+        try:
+            cutout_dir = _category_directory(APP_ROOT, "cutouts", category)
+            name = _safe_cutout_name(filename)
+        except ValueError:
+            return jsonify({"error": "Cutout was not found"}), 404
+        return send_from_directory(cutout_dir, name)
 
     @app.post("/api/preview")
     def preview():
