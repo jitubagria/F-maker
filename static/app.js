@@ -22,6 +22,8 @@ const assetsMessage = document.getElementById('assetsMessage');
 const assetComparison = document.getElementById('assetComparison');
 const assetBefore = document.getElementById('assetBefore');
 const assetAfter = document.getElementById('assetAfter');
+const templateLibrary = document.getElementById('templateLibrary');
+const templatesMessage = document.getElementById('templatesMessage');
 let config;
 let previewTimer;
 let previewUrl;
@@ -138,6 +140,56 @@ async function deleteAsset(card) {
   } catch (problem) { assetsMessage.textContent = problem.message; }
 }
 
+function zoneInputs(zone, values) {
+  return `<div class="zone-inputs">${['x', 'y', 'width', 'height'].map((label, index) => `<label>${label}<input class="zone-input" type="number" value="${values[index]}" required /></label>`).join('')}</div>`;
+}
+
+function renderTemplates(payload) {
+  templateLibrary.innerHTML = payload.domains.map((domainItem) => `<section class="template-domain"><div class="template-domain-heading"><p class="eyebrow">${escapeHtml(domainItem.name)}</p><h2>${escapeHtml(domainItem.name)} templates</h2></div><div class="template-grid">${domainItem.templates.map((templateItem) => `<article class="template-card" data-domain="${escapeHtml(domainItem.name)}" data-template="${escapeHtml(templateItem.name)}"><img src="${templateItem.background_url}?v=${Date.now()}" alt="${escapeHtml(templateItem.name)} background preview" /><div class="template-card-body"><div><p class="eyebrow">${escapeHtml(templateItem.name)}</p><h3>${escapeHtml(templateItem.name)} layout</h3></div><form class="template-background-form"><label>Replace background PNG<input name="background" type="file" accept="image/png" required /></label><button class="outline" type="submit">Upload PNG</button></form><form class="zone-form"><h4>Placement zones</h4>${['text_zone', 'subtitle_zone', 'photo_zone', 'logo_zone'].map((field) => `<fieldset><legend>${field.replace('_', ' ')}</legend>${zoneInputs(field, templateItem.zones[field])}</fieldset>`).join('')}<button class="export-button" type="submit">Save zones <span>→</span></button></form></div></article>`).join('')}</div></section>`).join('');
+  templateLibrary.querySelectorAll('.template-background-form').forEach((formElement) => formElement.addEventListener('submit', (event) => uploadTemplateBackground(event, formElement.closest('.template-card'))));
+  templateLibrary.querySelectorAll('.zone-form').forEach((formElement) => formElement.addEventListener('submit', (event) => saveTemplateZones(event, formElement.closest('.template-card'))));
+}
+
+async function loadTemplates() {
+  try {
+    const response = await fetch('/api/templates');
+    if (!response.ok) throw new Error('Templates could not be loaded.');
+    renderTemplates(await response.json());
+    templatesMessage.textContent = '';
+  } catch (problem) { templatesMessage.textContent = problem.message; }
+}
+
+async function uploadTemplateBackground(event, card) {
+  event.preventDefault();
+  const upload = card.querySelector('input[name="background"]').files[0];
+  if (!upload) return;
+  const formData = new FormData(); formData.append('background', upload);
+  try {
+    templatesMessage.textContent = `Uploading ${upload.name}…`;
+    const response = await fetch(`/api/templates/${encodeURIComponent(card.dataset.domain)}/${encodeURIComponent(card.dataset.template)}/background`, { method: 'POST', body: formData });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Background could not be uploaded.');
+    renderTemplates(result);
+    templatesMessage.textContent = `Updated ${card.dataset.template} background.`;
+  } catch (problem) { templatesMessage.textContent = problem.message; }
+}
+
+async function saveTemplateZones(event, card) {
+  event.preventDefault();
+  const fields = ['text_zone', 'subtitle_zone', 'photo_zone', 'logo_zone'];
+  const inputs = [...card.querySelectorAll('.zone-form fieldset')];
+  const zones = Object.fromEntries(fields.map((field, index) => [field, [...inputs[index].querySelectorAll('.zone-input')].map((input) => Number(input.value))]));
+  try {
+    const response = await fetch(`/api/templates/${encodeURIComponent(card.dataset.domain)}/${encodeURIComponent(card.dataset.template)}/zones`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zones }) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Zones could not be saved.');
+    renderTemplates(result);
+    templatesMessage.textContent = `Saved ${card.dataset.template} zones.`;
+    config = await (await fetch('/api/config')).json();
+    schedulePreview();
+  } catch (problem) { templatesMessage.textContent = problem.message; }
+}
+
 async function renderPreview() {
   clearTimeout(previewTimer);
   updateTitleCount(); updateLabel(); error.hidden = true;
@@ -167,6 +219,7 @@ async function initialise() {
   renderDashboard(stats);
   loadExports();
   loadAssets();
+  loadTemplates();
   renderPreview();
 }
 domain.addEventListener('change', refreshTemplates);
@@ -212,5 +265,5 @@ document.getElementById('assetUploadForm').addEventListener('submit', async (eve
     assetsMessage.textContent = `Created ${result.asset.name}.`;
   } catch (problem) { assetsMessage.textContent = problem.message; }
 });
-window.addEventListener('hashchange', () => { if (window.location.hash === '#exports') loadExports(); if (window.location.hash === '#assets') loadAssets(); });
+window.addEventListener('hashchange', () => { if (window.location.hash === '#exports') loadExports(); if (window.location.hash === '#assets') loadAssets(); if (window.location.hash === '#templates') loadTemplates(); });
 initialise().catch(problem => { error.textContent = `Could not load the editor: ${problem.message}`; error.hidden = false; });

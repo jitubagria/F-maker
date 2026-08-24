@@ -3,12 +3,14 @@ from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
 from datetime import datetime, timezone
+import copy
+import json
 import re
 
 from flask import Flask, jsonify, request, send_file, send_from_directory
 from PIL import Image, UnidentifiedImageError
 
-from engine import CFG, ROOT, generate, render
+from engine import CFG, ROOT, ConfigError, generate, render, validate_config
 
 APP_ROOT = Path(ROOT)
 OUTPUT_DIR = APP_ROOT / "output" / "exports"
@@ -17,6 +19,7 @@ CUTOUTS_DIR = APP_ROOT / "cutouts"
 MAX_ASSET_UPLOAD_BYTES = 10 * 1024 * 1024
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 CATEGORY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+TEMPLATE_ZONE_FIELDS = ("text_zone", "subtitle_zone", "photo_zone", "logo_zone")
 
 
 def public_config():
@@ -194,6 +197,56 @@ def _validate_uploaded_image(upload):
     return source_name
 
 
+def _template_record(config, domain_name, template_name):
+    domain = config.get("domains", {}).get(domain_name)
+    if not isinstance(domain, dict):
+        raise ValueError(f"Unknown domain: {domain_name}")
+    template = domain.get("templates", {}).get(template_name)
+    if not isinstance(template, dict):
+        raise ValueError(f"Unknown template '{template_name}' for domain '{domain_name}'")
+    return domain, template
+
+
+def template_payload(config=CFG):
+    domains = []
+    for domain_name, domain in config["domains"].items():
+        templates = []
+        for template_name, template in domain["templates"].items():
+            templates.append({
+                "name": template_name,
+                "background_url": f"/template-background/{domain_name}/{template_name}",
+                "zones": {field: template.get(field) for field in TEMPLATE_ZONE_FIELDS},
+            })
+        domains.append({"name": domain_name, "templates": templates})
+    return {"domains": domains}
+
+
+def save_config(config, root=APP_ROOT):
+    """Validate then atomically persist the single JSON config source of truth."""
+    root = Path(root)
+    validate_config(config, root)
+    config_path = root / "config" / "templates.json"
+    temporary = config_path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(config_path)
+    CFG.clear()
+    CFG.update(config)
+
+
+def update_template_zones(domain_name, template_name, zones, config=CFG, root=APP_ROOT):
+    """Return a fully validated configuration with one template's zones changed."""
+    if not isinstance(zones, dict):
+        raise ValueError("Zones must be an object")
+    updated = copy.deepcopy(config)
+    _, template = _template_record(updated, domain_name, template_name)
+    for field in TEMPLATE_ZONE_FIELDS:
+        if field not in zones:
+            raise ValueError(f"Zone '{field}' is required")
+        template[field] = zones[field]
+    validate_config(updated, root)
+    return updated
+
+
 def payload():
     body = request.get_json(silent=True) or {}
     return {
@@ -238,6 +291,57 @@ def create_app():
     @app.get("/api/stats")
     def stats():
         return jsonify(stats_payload())
+
+    @app.get("/api/templates")
+    def templates_list():
+        return jsonify(template_payload())
+
+    @app.put("/api/templates/<domain_name>/<template_name>/zones")
+    def template_zones(domain_name, template_name):
+        try:
+            updated = update_template_zones(
+                domain_name, template_name, (request.get_json(silent=True) or {}).get("zones"), CFG, APP_ROOT,
+            )
+            save_config(updated, APP_ROOT)
+        except (ValueError, ConfigError) as error:
+            return jsonify({"error": str(error)}), 400
+        return jsonify(template_payload())
+
+    @app.post("/api/templates/<domain_name>/<template_name>/background")
+    def template_background_upload(domain_name, template_name):
+        temporary = None
+        try:
+            _, template = _template_record(CFG, domain_name, template_name)
+            upload = request.files.get("background")
+            if not upload or not upload.filename or Path(upload.filename).suffix.lower() != ".png":
+                raise ValueError("Template background must be a PNG image")
+            _validate_uploaded_image(upload)
+            target = (APP_ROOT / template["background"]).resolve()
+            templates_root = (APP_ROOT / "templates").resolve()
+            if templates_root not in target.parents:
+                raise ValueError("Template background must stay inside the templates folder")
+            temporary = target.with_name(f".{target.name}.{uuid4().hex}.upload")
+            upload.save(temporary)
+            temporary.replace(target)
+            validate_config(CFG, APP_ROOT)
+        except (ValueError, ConfigError) as error:
+            return jsonify({"error": str(error)}), 400
+        finally:
+            if temporary and temporary.exists():
+                temporary.unlink()
+        return jsonify(template_payload())
+
+    @app.get("/template-background/<domain_name>/<template_name>")
+    def template_background_file(domain_name, template_name):
+        try:
+            _, template = _template_record(CFG, domain_name, template_name)
+            target = (APP_ROOT / template["background"]).resolve()
+            templates_root = (APP_ROOT / "templates").resolve()
+            if templates_root not in target.parents or not target.is_file():
+                raise ValueError("Template background was not found")
+        except ValueError:
+            return jsonify({"error": "Template background was not found"}), 404
+        return send_file(target, mimetype="image/png", max_age=0)
 
     @app.get("/api/assets")
     def asset_list():
